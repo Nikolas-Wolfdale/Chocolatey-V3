@@ -1,137 +1,165 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>apps.json Editor</title>
+  <title>Редактор apps.json</title>
   <style>
     body { font-family: sans-serif; padding: 1em; max-width: 1000px; margin: auto; }
-    input, select, button { margin: 0.3em; padding: 0.5em; }
+    input, button, select { margin: 0.3em; padding: 0.5em; }
     table { border-collapse: collapse; width: 100%; margin-top: 1em; }
     td, th { border: 1px solid #ccc; padding: 0.5em; }
     tr:hover { background-color: #f0f0f0; }
+    .form-group { margin-bottom: 1em; }
   </style>
 </head>
 <body>
   <h1>Редактор apps.json</h1>
 
-  <label>Платформа:
-    <select id="platform">
-      <option value="github">GitHub</option>
-      <option value="gitlab">GitLab</option>
-    </select>
-  </label><br>
-  <label>Access Token: <input type="password" id="token"></label><br>
-  <label>Repository (namespace/project): <input type="text" id="repo"></label><br>
-  <label>File Path (e.g. apps.json): <input type="text" id="path" value="apps.json"></label><br>
-  <button onclick="loadJSON()">📥 Загрузить</button>
-  <button onclick="addRow()">➕ Добавить программу</button>
-  <button onclick="saveJSON()">💾 Сохранить</button>
+  <div class="form-group">
+    <label>Платформа:
+      <select id="platform">
+        <option value="github">GitHub</option>
+        <option value="gitlab">GitLab</option>
+      </select>
+    </label><br>
+    <label>Access Token: <input type="password" id="token"></label><br>
+    <label>Проект (GitHub: username/repo, GitLab: ID или namespace/repo): <input type="text" id="repo"></label><br>
+    <label>Путь к файлу: <input type="text" id="path" value="apps.json"></label><br>
+    <button onclick="loadJSON()">📥 Загрузить</button>
+    <button onclick="saveJSON()">💾 Сохранить</button>
+    <button onclick="addRow()">➕ Добавить программу</button>
+  </div>
 
   <table id="table">
     <thead>
       <tr>
-        <th>name</th><th>type</th><th>current_version</th><th>check_url</th><th>download_url</th><th>удалить</th>
+        <th>name</th>
+        <th>type</th>
+        <th>current_version</th>
+        <th>check_url</th>
+        <th>download_url</th>
+        <th>удалить</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 
-<script>
-let data = [];
-let fileSha = null;
-let fileLastCommitId = null;
+  <script>
+    let data = [];
+    let githubSha = "";
 
-function encodeRepo(name) {
-  return encodeURIComponent(name).replaceAll('.', '%2E');
-}
+    function loadJSON() {
+      const token = document.getElementById("token").value;
+      const repo = document.getElementById("repo").value;
+      const path = document.getElementById("path").value;
+      const platform = document.getElementById("platform").value;
 
-function loadJSON() {
-  const token = document.getElementById("token").value;
-  const repo = document.getElementById("repo").value;
-  const path = document.getElementById("path").value;
-  const platform = document.getElementById("platform").value;
-
-  const headers = { Authorization: platform === 'github' ? `token ${token}` : `Bearer ${token}` };
-
-  const url = platform === 'github'
-    ? `https://api.github.com/repos/${repo}/contents/${path}`
-    : `https://gitlab.com/api/v4/projects/${encodeRepo(repo)}/repository/files/${encodeURIComponent(path)}?ref=main`;
-
-  fetch(url, { headers })
-    .then(res => res.json())
-    .then(json => {
-      const content = platform === 'github' ? atob(json.content) : atob(json.content);
-      data = JSON.parse(content);
-      fileSha = json.sha || null;
-      fileLastCommitId = json.last_commit_id || null;
-      renderTable();
-    }).catch(e => alert("❌ Ошибка загрузки: " + e));
-}
-
-function renderTable() {
-  const tbody = document.querySelector("tbody");
-  tbody.innerHTML = "";
-  data.forEach((entry, i) => addRow(entry, i));
-}
-
-function addRow(entry = {}, index = data.length) {
-  const row = document.getElementById("table").querySelector("tbody").insertRow();
-  const fields = ["name", "type", "current_version", "check_url", "download_url"];
-  fields.forEach(field => {
-    const cell = row.insertCell();
-    const input = document.createElement("input");
-    input.value = entry[field] || "";
-    input.oninput = () => data[index][field] = input.value;
-    cell.appendChild(input);
-  });
-  const del = row.insertCell();
-  const btn = document.createElement("button");
-  btn.textContent = "✖";
-  btn.onclick = () => {
-    data.splice(index, 1);
-    renderTable();
-  };
-  del.appendChild(btn);
-  data[index] = entry;
-}
-
-function saveJSON() {
-  const token = document.getElementById("token").value;
-  const repo = document.getElementById("repo").value;
-  const path = document.getElementById("path").value;
-  const platform = document.getElementById("platform").value;
-
-  const headers = {
-    Authorization: platform === 'github' ? `token ${token}` : `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  };
-  const content = btoa(JSON.stringify(data, null, 2));
-
-  const body = platform === 'github'
-    ? {
-        message: "Update apps.json",
-        content,
-        sha: fileSha
+      if (platform === "github") {
+        fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+          headers: { Authorization: `token ${token}` }
+        })
+        .then(r => r.json())
+        .then(json => {
+          if (!json.content) throw new Error("Файл не найден или нет доступа");
+          const content = atob(json.content.replace(/\n/g, ""));
+          data = JSON.parse(content);
+          githubSha = json.sha;
+          refreshTable();
+        })
+        .catch(e => alert("❌ Ошибка загрузки с GitHub: " + e.message));
+      } else {
+        // GitLab
+        const encodedPath = encodeURIComponent(path);
+        fetch(`https://gitlab.com/api/v4/projects/${encodeURIComponent(repo)}/repository/files/${encodedPath}?ref=main`, {
+          headers: { "PRIVATE-TOKEN": token }
+        })
+        .then(r => r.json())
+        .then(json => {
+          if (!json.content) throw new Error("Файл не найден или нет доступа");
+          const content = atob(json.content.replace(/\n/g, ""));
+          data = JSON.parse(content);
+          refreshTable();
+        })
+        .catch(e => alert("❌ Ошибка загрузки с GitLab: " + e.message));
       }
-    : {
-        branch: "main",
-        content,
-        commit_message: "Update apps.json"
+    }
+
+    function saveJSON() {
+      const token = document.getElementById("token").value;
+      const repo = document.getElementById("repo").value;
+      const path = document.getElementById("path").value;
+      const platform = document.getElementById("platform").value;
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+
+      if (platform === "github") {
+        fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+          method: "PUT",
+          headers: {
+            Authorization: `token ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            message: "Update apps.json",
+            content,
+            sha: githubSha
+          })
+        })
+        .then(r => {
+          if (r.ok) alert("✅ Сохранено в GitHub!");
+          else return r.json().then(err => { throw new Error(err.message || "Ошибка при сохранении в GitHub"); });
+        })
+        .catch(e => alert("❌ Ошибка сохранения в GitHub: " + e.message));
+      } else {
+        // GitLab
+        const encodedPath = encodeURIComponent(path);
+        fetch(`https://gitlab.com/api/v4/projects/${encodeURIComponent(repo)}/repository/files/${encodedPath}`, {
+          method: "PUT",
+          headers: {
+            "PRIVATE-TOKEN": token,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            branch: "main",
+            content,
+            commit_message: "Update apps.json"
+          })
+        })
+        .then(r => {
+          if (r.ok) alert("✅ Сохранено в GitLab!");
+          else return r.json().then(err => { throw new Error(err.message || "Ошибка при сохранении в GitLab"); });
+        })
+        .catch(e => alert("❌ Ошибка сохранения в GitLab: " + e.message));
+      }
+    }
+
+    function refreshTable() {
+      const tbody = document.querySelector("#table tbody");
+      tbody.innerHTML = "";
+      data.forEach((entry, i) => addRow(entry, i));
+    }
+
+    function addRow(entry = {}, index = data.length) {
+      const row = document.querySelector("#table tbody").insertRow();
+      const fields = ["name", "type", "current_version", "check_url", "download_url"];
+      fields.forEach(field => {
+        const cell = row.insertCell();
+        const input = document.createElement("input");
+        input.value = entry[field] || "";
+        input.oninput = () => data[index][field] = input.value;
+        cell.appendChild(input);
+      });
+
+      const del = row.insertCell();
+      const btn = document.createElement("button");
+      btn.textContent = "✖";
+      btn.onclick = () => {
+        data.splice(index, 1);
+        refreshTable();
       };
+      del.appendChild(btn);
 
-  const url = platform === 'github'
-    ? `https://api.github.com/repos/${repo}/contents/${path}`
-    : `https://gitlab.com/api/v4/projects/${encodeRepo(repo)}/repository/files/${encodeURIComponent(path)}`;
-
-  fetch(url, {
-    method: platform === 'github' ? "PUT" : "PUT",
-    headers,
-    body: JSON.stringify(body)
-  }).then(r => {
-    if (r.ok) alert("✅ Успешно сохранено");
-    else r.text().then(t => alert("❌ Ошибка: " + t));
-  });
-}
-</script>
+      data[index] = entry;
+    }
+  </script>
 </body>
 </html>
