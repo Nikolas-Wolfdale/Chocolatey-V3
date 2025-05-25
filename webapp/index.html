@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>apps.json Editor</title>
+  <style>
+    body { font-family: sans-serif; padding: 1em; max-width: 1000px; margin: auto; }
+    input, select, button { margin: 0.3em; padding: 0.5em; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1em; }
+    td, th { border: 1px solid #ccc; padding: 0.5em; }
+    tr:hover { background-color: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <h1>Редактор apps.json</h1>
+
+  <label>Платформа:
+    <select id="platform">
+      <option value="github">GitHub</option>
+      <option value="gitlab">GitLab</option>
+    </select>
+  </label><br>
+  <label>Access Token: <input type="password" id="token"></label><br>
+  <label>Repository (namespace/project): <input type="text" id="repo"></label><br>
+  <label>File Path (e.g. apps.json): <input type="text" id="path" value="apps.json"></label><br>
+  <button onclick="loadJSON()">📥 Загрузить</button>
+  <button onclick="addRow()">➕ Добавить программу</button>
+  <button onclick="saveJSON()">💾 Сохранить</button>
+
+  <table id="table">
+    <thead>
+      <tr>
+        <th>name</th><th>type</th><th>current_version</th><th>check_url</th><th>download_url</th><th>удалить</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+let data = [];
+let fileSha = null;
+let fileLastCommitId = null;
+
+function encodeRepo(name) {
+  return encodeURIComponent(name).replaceAll('.', '%2E');
+}
+
+function loadJSON() {
+  const token = document.getElementById("token").value;
+  const repo = document.getElementById("repo").value;
+  const path = document.getElementById("path").value;
+  const platform = document.getElementById("platform").value;
+
+  const headers = { Authorization: platform === 'github' ? `token ${token}` : `Bearer ${token}` };
+
+  const url = platform === 'github'
+    ? `https://api.github.com/repos/${repo}/contents/${path}`
+    : `https://gitlab.com/api/v4/projects/${encodeRepo(repo)}/repository/files/${encodeURIComponent(path)}?ref=main`;
+
+  fetch(url, { headers })
+    .then(res => res.json())
+    .then(json => {
+      const content = platform === 'github' ? atob(json.content) : atob(json.content);
+      data = JSON.parse(content);
+      fileSha = json.sha || null;
+      fileLastCommitId = json.last_commit_id || null;
+      renderTable();
+    }).catch(e => alert("❌ Ошибка загрузки: " + e));
+}
+
+function renderTable() {
+  const tbody = document.querySelector("tbody");
+  tbody.innerHTML = "";
+  data.forEach((entry, i) => addRow(entry, i));
+}
+
+function addRow(entry = {}, index = data.length) {
+  const row = document.getElementById("table").querySelector("tbody").insertRow();
+  const fields = ["name", "type", "current_version", "check_url", "download_url"];
+  fields.forEach(field => {
+    const cell = row.insertCell();
+    const input = document.createElement("input");
+    input.value = entry[field] || "";
+    input.oninput = () => data[index][field] = input.value;
+    cell.appendChild(input);
+  });
+  const del = row.insertCell();
+  const btn = document.createElement("button");
+  btn.textContent = "✖";
+  btn.onclick = () => {
+    data.splice(index, 1);
+    renderTable();
+  };
+  del.appendChild(btn);
+  data[index] = entry;
+}
+
+function saveJSON() {
+  const token = document.getElementById("token").value;
+  const repo = document.getElementById("repo").value;
+  const path = document.getElementById("path").value;
+  const platform = document.getElementById("platform").value;
+
+  const headers = {
+    Authorization: platform === 'github' ? `token ${token}` : `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  };
+  const content = btoa(JSON.stringify(data, null, 2));
+
+  const body = platform === 'github'
+    ? {
+        message: "Update apps.json",
+        content,
+        sha: fileSha
+      }
+    : {
+        branch: "main",
+        content,
+        commit_message: "Update apps.json"
+      };
+
+  const url = platform === 'github'
+    ? `https://api.github.com/repos/${repo}/contents/${path}`
+    : `https://gitlab.com/api/v4/projects/${encodeRepo(repo)}/repository/files/${encodeURIComponent(path)}`;
+
+  fetch(url, {
+    method: platform === 'github' ? "PUT" : "PUT",
+    headers,
+    body: JSON.stringify(body)
+  }).then(r => {
+    if (r.ok) alert("✅ Успешно сохранено");
+    else r.text().then(t => alert("❌ Ошибка: " + t));
+  });
+}
+</script>
+</body>
+</html>
