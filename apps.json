@@ -10,13 +10,38 @@
     "download_url": ""
   },
   {
-    "name": "pgAdmin",
-    "type": "pgadmin",
-    "current_version": "9.3",
-    "actual_version": "9.3",
-    "last_check": "2025-05-21",
-    "last_update": "2025-05-21",
-    "check_url": "https://www.pgadmin.org/download/pgadmin-4-windows/",
-    "download_url": ""
+    "name": "7zip",
+    "type": "sevenzip",
+    "current_version": "0.0"
+  },
+  {
+    "name": "firefox",
+    "type": "firefox",
+    "current_version": "0.0"
+  },
+  {
+    "name": "git-silent-installer",
+    "type": "git-silent-installer",
+    "current_version": "0.0"
+  },
+  {
+    "name": "naps2",
+    "type": "naps2",
+    "current_version": "0.0"
+  },
+  {
+    "name": "nodejs",
+    "type": "nodejs",
+    "current_version": "0.0"
+  },
+  {
+    "name": "notepad",
+    "type": "notepad",
+    "current_version": "0.0"
+  },
+  {
+    "name": "tortoise-git-proc",
+    "type": "tortoise-git-proc",
+    "current_version": "0.0"
   }
 ]
