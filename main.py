@@ -27,3 +27,4 @@ for app in apps:
 
 with open("apps.json", "w", encoding="utf-8") as f:
     json.dump(apps, f, indent=2, ensure_ascii=False)
+
